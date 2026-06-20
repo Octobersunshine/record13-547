@@ -1,0 +1,181 @@
+package handlers
+
+import (
+	"net/http"
+	"strconv"
+	"travel-expense/models"
+	"travel-expense/service"
+
+	"github.com/gin-gonic/gin"
+)
+
+type ExpenseHandler struct{}
+
+func NewExpenseHandler() *ExpenseHandler {
+	return &ExpenseHandler{}
+}
+
+type Response struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data,omitempty"`
+}
+
+func (h *ExpenseHandler) CheckBudget(c *gin.Context) {
+	departmentID := c.Query("department_id")
+	amountStr := c.Query("amount")
+
+	if departmentID == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    400,
+			Message: "部门ID不能为空",
+		})
+		return
+	}
+
+	amount, err := strconv.ParseFloat(amountStr, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    400,
+			Message: "金额格式错误",
+		})
+		return
+	}
+
+	if amount <= 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    400,
+			Message: "金额必须大于0",
+		})
+		return
+	}
+
+	result, err := service.CheckBudget(departmentID, amount)
+	if err != nil {
+		c.JSON(http.StatusNotFound, Response{
+			Code:    404,
+			Message: err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    200,
+		Message: "success",
+		Data:    result,
+	})
+}
+
+func (h *ExpenseHandler) SubmitExpense(c *gin.Context) {
+	var req models.ExpenseReportRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    400,
+			Message: "参数错误: " + err.Error(),
+		})
+		return
+	}
+
+	report, err := service.SubmitExpenseReport(&req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    400,
+			Message: err.Error(),
+		})
+		return
+	}
+
+	statusMsg := "报销单提交成功"
+	if report.Status == "rejected" {
+		statusMsg = "报销单已提交，但因预算不足被驳回"
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    200,
+		Message: statusMsg,
+		Data:    report,
+	})
+}
+
+func (h *ExpenseHandler) GetExpense(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    400,
+			Message: "ID格式错误",
+		})
+		return
+	}
+
+	report, err := service.GetExpenseReport(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, Response{
+			Code:    404,
+			Message: "报销单不存在",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    200,
+		Message: "success",
+		Data:    report,
+	})
+}
+
+func (h *ExpenseHandler) ListExpenses(c *gin.Context) {
+	departmentID := c.Query("department_id")
+	status := c.Query("status")
+
+	reports, err := service.ListExpenseReports(departmentID, status)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    500,
+			Message: "查询失败: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    200,
+		Message: "success",
+		Data:    reports,
+	})
+}
+
+func (h *ExpenseHandler) ListDepartments(c *gin.Context) {
+	departments, err := service.ListDepartments()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    500,
+			Message: "查询失败: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    200,
+		Message: "success",
+		Data:    departments,
+	})
+}
+
+func (h *ExpenseHandler) GetDepartmentBudget(c *gin.Context) {
+	departmentID := c.Param("department_id")
+
+	budget, err := service.GetDepartmentBudgetInfo(departmentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, Response{
+			Code:    404,
+			Message: "部门预算不存在",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    200,
+		Message: "success",
+		Data:    budget,
+	})
+}
