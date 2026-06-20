@@ -126,3 +126,21 @@ func GetAllDepartments() ([]models.DepartmentBudget, error) {
 func UpdateDepartmentBudget(budget *models.DepartmentBudget) error {
 	return DB.Save(budget).Error
 }
+
+func GetExpenseReportByIdempotencyKey(key string) (*models.ExpenseReport, error) {
+	var report models.ExpenseReport
+	result := DB.Preload("Items").Where("idempotency_key = ?", key).First(&report)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &report, nil
+}
+
+func GetExpenseReportByContentHash(hash string) (*models.ExpenseReport, error) {
+	var report models.ExpenseReport
+	result := DB.Preload("Items").Where("content_hash = ?", hash).First(&report)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &report, nil
+}

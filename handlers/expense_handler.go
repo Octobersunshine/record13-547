@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"travel-expense/models"
@@ -66,7 +67,15 @@ func (h *ExpenseHandler) CheckBudget(c *gin.Context) {
 	})
 }
 
+type SubmitResponse struct {
+	IsDuplicate   bool                   `json:"is_duplicate"`
+	DuplicateBy   string                 `json:"duplicate_by,omitempty"`
+	ExpenseReport *models.ExpenseReport  `json:"expense_report"`
+}
+
 func (h *ExpenseHandler) SubmitExpense(c *gin.Context) {
+	idempotencyKey := c.GetHeader("Idempotency-Key")
+
 	var req models.ExpenseReportRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, Response{
@@ -76,7 +85,7 @@ func (h *ExpenseHandler) SubmitExpense(c *gin.Context) {
 		return
 	}
 
-	report, err := service.SubmitExpenseReport(&req)
+	result, err := service.SubmitExpenseReport(&req, idempotencyKey)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    400,
@@ -86,14 +95,26 @@ func (h *ExpenseHandler) SubmitExpense(c *gin.Context) {
 	}
 
 	statusMsg := "报销单提交成功"
-	if report.Status == "rejected" {
+	if result.Report.Status == "rejected" {
 		statusMsg = "报销单已提交，但因预算不足被驳回"
+	}
+
+	if result.IsDuplicate {
+		duplicateType := "内容"
+		if result.DuplicateBy == "idempotency_key" {
+			duplicateType = "幂等键"
+		}
+		statusMsg = fmt.Sprintf("重复提交检测：该报销单已存在（%s匹配），返回原始记录", duplicateType)
 	}
 
 	c.JSON(http.StatusOK, Response{
 		Code:    200,
 		Message: statusMsg,
-		Data:    report,
+		Data: SubmitResponse{
+			IsDuplicate:   result.IsDuplicate,
+			DuplicateBy:   result.DuplicateBy,
+			ExpenseReport: result.Report,
+		},
 	})
 }
 

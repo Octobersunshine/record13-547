@@ -24,6 +24,8 @@ type ExpenseItem struct {
 type ExpenseReport struct {
 	ID             uint          `gorm:"primaryKey" json:"id"`
 	ReportNo       string        `gorm:"size:50;uniqueIndex" json:"report_no"`
+	IdempotencyKey *string       `gorm:"size:64;uniqueIndex" json:"idempotency_key,omitempty"`
+	ContentHash    string        `gorm:"size:64;uniqueIndex" json:"content_hash,omitempty"`
 	EmployeeID     string        `gorm:"size:50" json:"employee_id"`
 	EmployeeName   string        `gorm:"size:100" json:"employee_name"`
 	DepartmentID   string        `gorm:"size:50;index" json:"department_id"`
