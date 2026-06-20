@@ -14,31 +14,36 @@ type DepartmentBudget struct {
 }
 
 type ExpenseItem struct {
-	ID            uint    `gorm:"primaryKey" json:"id"`
-	ExpenseReportID uint  `json:"-"`
-	ItemType      string  `gorm:"size:50" json:"item_type"`
-	Description   string  `gorm:"size:255" json:"description"`
-	Amount        float64 `json:"amount"`
+	ID              uint    `gorm:"primaryKey" json:"id"`
+	ExpenseReportID uint    `json:"-"`
+	ItemType        string  `gorm:"size:50" json:"item_type"`
+	Description     string  `gorm:"size:255" json:"description"`
+	Amount          float64 `json:"amount"`
+	CompanyAmount   float64 `json:"company_amount"`
+	PersonalAmount  float64 `json:"personal_amount"`
+	PayBy           string  `gorm:"size:20;default:'company'" json:"pay_by"`
 }
 
 type ExpenseReport struct {
-	ID             uint          `gorm:"primaryKey" json:"id"`
-	ReportNo       string        `gorm:"size:50;uniqueIndex" json:"report_no"`
-	IdempotencyKey *string       `gorm:"size:64;uniqueIndex" json:"idempotency_key,omitempty"`
-	ContentHash    string        `gorm:"size:64;uniqueIndex" json:"content_hash,omitempty"`
-	EmployeeID     string        `gorm:"size:50" json:"employee_id"`
-	EmployeeName   string        `gorm:"size:100" json:"employee_name"`
-	DepartmentID   string        `gorm:"size:50;index" json:"department_id"`
-	DepartmentName string        `gorm:"size:100" json:"department_name"`
-	TravelPurpose  string        `gorm:"size:255" json:"travel_purpose"`
-	StartDate      time.Time     `json:"start_date"`
-	EndDate        time.Time     `json:"end_date"`
-	TotalAmount    float64       `json:"total_amount"`
-	Status         string        `gorm:"size:20;default:'pending'" json:"status"`
-	Items          []ExpenseItem `gorm:"foreignKey:ExpenseReportID" json:"items"`
-	RejectionReason string       `gorm:"size:255" json:"rejection_reason,omitempty"`
-	CreatedAt      time.Time     `json:"created_at"`
-	UpdatedAt      time.Time     `json:"updated_at"`
+	ID              uint          `gorm:"primaryKey" json:"id"`
+	ReportNo        string        `gorm:"size:50;uniqueIndex" json:"report_no"`
+	IdempotencyKey  *string       `gorm:"size:64;uniqueIndex" json:"idempotency_key,omitempty"`
+	ContentHash     string        `gorm:"size:64;uniqueIndex" json:"content_hash,omitempty"`
+	EmployeeID      string        `gorm:"size:50" json:"employee_id"`
+	EmployeeName    string        `gorm:"size:100" json:"employee_name"`
+	DepartmentID    string        `gorm:"size:50;index" json:"department_id"`
+	DepartmentName  string        `gorm:"size:100" json:"department_name"`
+	TravelPurpose   string        `gorm:"size:255" json:"travel_purpose"`
+	StartDate       time.Time     `json:"start_date"`
+	EndDate         time.Time     `json:"end_date"`
+	TotalAmount     float64       `json:"total_amount"`
+	CompanyAmount   float64       `json:"company_amount"`
+	PersonalAmount  float64       `json:"personal_amount"`
+	Status          string        `gorm:"size:20;default:'pending'" json:"status"`
+	Items           []ExpenseItem `gorm:"foreignKey:ExpenseReportID" json:"items"`
+	RejectionReason string        `gorm:"size:255" json:"rejection_reason,omitempty"`
+	CreatedAt       time.Time     `json:"created_at"`
+	UpdatedAt       time.Time     `json:"updated_at"`
 }
 
 type ExpenseReportRequest struct {

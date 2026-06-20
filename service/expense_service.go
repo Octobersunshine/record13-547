@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -16,6 +17,21 @@ type SubmitResult struct {
 	Report      *models.ExpenseReport
 	IsDuplicate bool
 	DuplicateBy string
+}
+
+type PaymentSplit struct {
+	CompanyAmount  float64 `json:"company_amount"`
+	PersonalAmount float64 `json:"personal_amount"`
+	Items          []ItemSplit `json:"items"`
+}
+
+type ItemSplit struct {
+	ItemType       string  `json:"item_type"`
+	Description    string  `json:"description"`
+	Amount         float64 `json:"amount"`
+	CompanyAmount  float64 `json:"company_amount"`
+	PersonalAmount float64 `json:"personal_amount"`
+	PayBy          string  `json:"pay_by"`
 }
 
 func GenerateContentHash(req *models.ExpenseReportRequest) string {
@@ -62,6 +78,48 @@ func GenerateContentHash(req *models.ExpenseReportRequest) string {
 
 	hash := sha256.Sum256([]byte(content.String()))
 	return hex.EncodeToString(hash[:])
+}
+
+func SplitPayment(items []models.ExpenseItemRequest, remainingBudget float64) *PaymentSplit {
+	split := &PaymentSplit{
+		Items: make([]ItemSplit, 0, len(items)),
+	}
+
+	budgetLeft := remainingBudget
+
+	for _, item := range items {
+		itemSplit := ItemSplit{
+			ItemType:    item.ItemType,
+			Description: item.Description,
+			Amount:      item.Amount,
+		}
+
+		if budgetLeft <= 0 {
+			itemSplit.CompanyAmount = 0
+			itemSplit.PersonalAmount = item.Amount
+			itemSplit.PayBy = "personal"
+		} else if item.Amount <= budgetLeft {
+			itemSplit.CompanyAmount = item.Amount
+			itemSplit.PersonalAmount = 0
+			itemSplit.PayBy = "company"
+			budgetLeft -= item.Amount
+		} else {
+			itemSplit.CompanyAmount = budgetLeft
+			itemSplit.PersonalAmount = item.Amount - budgetLeft
+			itemSplit.PayBy = "split"
+			budgetLeft = 0
+		}
+
+		split.CompanyAmount += itemSplit.CompanyAmount
+		split.PersonalAmount += itemSplit.PersonalAmount
+		split.Items = append(split.Items, itemSplit)
+	}
+
+	return split
+}
+
+func RoundToTwo(f float64) float64 {
+	return math.Round(f*100) / 100
 }
 
 func CheckBudget(departmentID string, totalAmount float64) (*models.BudgetCheckResult, error) {
@@ -116,11 +174,6 @@ func SubmitExpenseReport(req *models.ExpenseReportRequest, idempotencyKey string
 		totalAmount += item.Amount
 	}
 
-	budgetCheck, err := CheckBudget(req.DepartmentID, totalAmount)
-	if err != nil {
-		return nil, err
-	}
-
 	budget, err := database.GetDepartmentBudget(req.DepartmentID)
 	if err != nil {
 		return nil, fmt.Errorf("获取部门预算失败: %w", err)
@@ -142,12 +195,17 @@ func SubmitExpenseReport(req *models.ExpenseReportRequest, idempotencyKey string
 
 	reportNo := fmt.Sprintf("EXP%s%06d", time.Now().Format("20060102"), time.Now().UnixNano()%1000000)
 
+	paymentSplit := SplitPayment(req.Items, budget.RemainingBudget)
+
 	status := "approved"
 	rejectionReason := ""
 
-	if !budgetCheck.Pass {
-		status = "rejected"
-		rejectionReason = budgetCheck.Message
+	if paymentSplit.PersonalAmount > 0 {
+		status = "partial_approved"
+		rejectionReason = fmt.Sprintf(
+			"预算不足，超标部分转个人结算。公司承担: %.2f 元，个人承担: %.2f 元",
+			paymentSplit.CompanyAmount, paymentSplit.PersonalAmount,
+		)
 	}
 
 	var idemKey *string
@@ -167,16 +225,21 @@ func SubmitExpenseReport(req *models.ExpenseReportRequest, idempotencyKey string
 		StartDate:       startDate,
 		EndDate:         endDate,
 		TotalAmount:     totalAmount,
+		CompanyAmount:   RoundToTwo(paymentSplit.CompanyAmount),
+		PersonalAmount:  RoundToTwo(paymentSplit.PersonalAmount),
 		Status:          status,
 		RejectionReason: rejectionReason,
 		Items:           make([]models.ExpenseItem, 0, len(req.Items)),
 	}
 
-	for _, item := range req.Items {
+	for _, itemSplit := range paymentSplit.Items {
 		report.Items = append(report.Items, models.ExpenseItem{
-			ItemType:    item.ItemType,
-			Description: item.Description,
-			Amount:      item.Amount,
+			ItemType:       itemSplit.ItemType,
+			Description:    itemSplit.Description,
+			Amount:         itemSplit.Amount,
+			CompanyAmount:  RoundToTwo(itemSplit.CompanyAmount),
+			PersonalAmount: RoundToTwo(itemSplit.PersonalAmount),
+			PayBy:          itemSplit.PayBy,
 		})
 	}
 

@@ -71,8 +71,9 @@ func CreateExpenseReport(report *models.ExpenseReport) error {
 			return err
 		}
 
-		if report.Status == "approved" {
-			budget.UsedBudget += report.TotalAmount
+		if report.Status == "approved" || report.Status == "partial_approved" {
+			deductAmount := report.CompanyAmount
+			budget.UsedBudget += deductAmount
 			budget.RemainingBudget = budget.TotalBudget - budget.UsedBudget
 			if err := tx.Save(&budget).Error; err != nil {
 				return err

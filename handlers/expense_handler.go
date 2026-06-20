@@ -95,8 +95,9 @@ func (h *ExpenseHandler) SubmitExpense(c *gin.Context) {
 	}
 
 	statusMsg := "报销单提交成功"
-	if result.Report.Status == "rejected" {
-		statusMsg = "报销单已提交，但因预算不足被驳回"
+	if result.Report.Status == "partial_approved" {
+		statusMsg = fmt.Sprintf("报销单部分通过：超标部分转个人结算（公司: %.2f 元，个人: %.2f 元）",
+			result.Report.CompanyAmount, result.Report.PersonalAmount)
 	}
 
 	if result.IsDuplicate {
